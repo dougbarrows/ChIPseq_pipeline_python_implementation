@@ -10,22 +10,61 @@ from datetime import datetime
 
 # other things to add:
 ## read trimming
-## ngs plot
-## deeptools QC 
-###correlation
-###coverage
-###pca
+## input gene list for ngsplot?
 ## peak calling - homer and macs2?
 ## make the log separate for each sample??
 
-# dependencies - picard, fastqc, bwa, bowtie2, samtools, deeptools
+# dependencies - picard, fastqc, bwa, bowtie2, samtools, deeptools, macs2
+
+
+# this function is largely from Menas function from CSHL course, only thing I changed was to make the negative strand genes TSS be the 'end'
+def gff_to_TSS(gff3filename):
+    # Determine the output file name
+    outputfilename = "./"+os.path.splitext(gff3filename)[0]+".TSS.bed"
+
+    # fields in a gff3 files
+    field_str = "seqid source genetype start end score strand phase attributes"
+    fields = field_str.split(' ') # makes a list of the columns in the gff file
+
+
+    # open gff3 file, read in lines with gene information
+    with open(gff3filename, 'r') as fo, open(outputfilename, 'w') as outputfile:
+
+        for line in fo:
+            line = line.strip()
+
+            # skip header lines
+            if line.startswith('#'):
+                continue
+            # get info from non-header lines
+            else:
+                data = dict(zip(fields,line.split('\t')))	# dict(zip()) is a clever way to make a dictionary from two lists with the keys as list 1 and values as list 2	
+                # only keep lines that are of type "gene"
+                # print relevant columns to file
+
+                if data['genetype'] == 'gene':
+
+                    attributes = data['attributes'].split(";")
+                    gene_name = attributes[0]+";"+attributes[1]
+                    strand = data['strand']
+
+                    bed_line = "chr{}\t{}\t{}\t{}\t{}\t{}\n"
+                    if data['strand'] == "-":
+                        outputfile.write(bed_line.format(data['seqid'], int(data['end']), int(data['end']) + 1, gene_name, '', strand))
+                    else:
+                        outputfile.write(bed_line.format(data['seqid'], int(data['start']), int(data['start']) + 1, gene_name, '', strand))
+        return(outputfilename)
 
 def filterFastq(fastqPath):
     if fastqPath.endswith(".fq"):
         filteredPath = fastqPath[:-3] + "_filtered.fq"
+    if fastqPath.endswith(".fq.gz"):
+        filteredPath = fastqPath[:-6] + "_filtered.fq"
     if fastqPath.endswith(".fastq"):
         filteredPath = fastqPath[:-6] + "_filtered.fastq"
-    with open(r"{}".format(fastqPath), "r") as fo, open(r"{}".format(filteredPath), "w") as filter_fo:
+    if fastqPath.endswith(".fastq.gz"):
+        filteredPath = fastqPath[:-9] + "_filtered.fastq"
+    with gzip.open(r"{}".format(fastqPath), "rt") as fo, open(r"{}".format(filteredPath), "w") as filter_fo:
         record_all = []
         seq = []
         for record in SeqIO.parse(fo, "fastq"):
@@ -74,22 +113,26 @@ def main():
     parser = argparse.ArgumentParser(description="""
         Pipeline for ChIPseq 
         """)
-    parser.add_argument('-f','--fasta', help='The aligner to use, bwa-mem will be used by default')
-    parser.add_argument('-a','--aligner', choices = ['bwa-mem', 'bowtie2'], help='The name of the fasta file for the reference genome (eg hg19.fa). This can be a full path if the file is not in the current working directory.')
+    parser.add_argument('-f','--fasta', help='The name of the fasta file for the reference genome (eg hg19.fa). This can be a full path if the file is not in the current working directory.')
+    parser.add_argument('-a','--aligner', choices = ['bwa-mem', 'bowtie2'], help='The aligner to use, bwa-mem will be used by default')
     parser.add_argument('-q','--pathToFastqs', help='The path to the folder that contains the fastq files.')
-    parser.add_argument('-g', '--genome' , choices = ['hg38', 'hg19', 'mm10'], help="This is required if no fasta reference file is provided in the '-f' argument. This will determine which reference genome fasta is downloaded. This is also required if peak calling is desired")
+    parser.add_argument('-g', '--genome' , choices = ['hg38', 'hg19', 'mm10'], help="This is required if no fasta reference file is provided in the '-f' argument, if peaks are to be called, or if '-t' is True. This will determine which reference genome fasta is downloaded. This is also required if peak calling is desired")
     parser.add_argument('-i', '--index', choices = ['True', 'False'], help='If a reference fasta is provided, please indicate whether you need it to be indexed with BWA')
     parser.add_argument('-d', '--remove_duplicates', choices = ['True', 'False'], help='This will determine if duplicates should be removed, by defualt they will be flagged in the bam file, but not removed.')
     parser.add_argument('-s', '--sampleSheet', help='If peaks should be called, the path to the peak sample sheet should be provided here. If no path is included, peaks will not be called.')
     parser.add_argument('-p', '--peakCaller', choices = ['macs2', 'homer'], help='The peak caller to be used.')
-    parser.add_argument('-x', '--extraPeakArgs', help="A string to be added onto either macs2 or homer command in addition to the standard arguments. Make sure to put in quotes. E.g. -x '--bw 300 -q 0.01'")
-    parser.add_argument('-c', '--pcaCorr', choices = ['True', 'False'], help="Perform PCA oand correlation analysis with deepTools")
-    
+    parser.add_argument('-P', '--extraPeakArgs', help="A string to be added onto either macs2 or homer command in addition to the standard arguments. Make sure to put in quotes. E.g. -x '--bw 300 -q 0.01'")
+    parser.add_argument('-c', '--pcaCorr', help="Perform PCA and correlation analysis with deepTools")
+    parser.add_argument('-t', '--tssPlot', choices = ['True', 'False'], help="Output a signal plot over TSS.")
+    parser.add_argument('-n', '--ngsPlot', choices = ['tss', 'tes', 'genebody', 'exon'], nargs = '*', help="Output a signal plot over the specified region type.")
+    parser.add_argument('-N', '--ngsPlotExtra', help="A string to be added onto 'ngs.plot.r' command within the ngsplot package. The arguments (ngs.plot.r arguments, not from this pipeline) already included are -G, -R, -C, -O.  Make sure to put in quotes. E.g. -N ' -D ensembl -FL 300'")
 
     args = parser.parse_args()
     
     pathtoFastqs = args.pathToFastqs
     
+                
+       
     if args.genome:
         genome = args.genome
         
@@ -151,25 +194,34 @@ def main():
                 exit(2)
 
         
-        
-        print("Generating FastQC reports for fastq file and filtering low quality reads...")
+        fastqs = os.listdir(args.pathToFastqs)
+        fastqs_to_analyze = []
+        for file in fastqs:
+            if file.endswith("fq") or file.endswith("fastq") or file.endswith("fq.gz") or file.endswith("fastq.gz"):
+                fastqs_to_analyze.append(file)
+        if len(fastqs_to_analyze) == 0:
+            print("no fastq files detected, make sure the fastq files end with either 'fq', 'fastq', 'fq.gz', 'fastq.gz'")
+            exit(3)
+        else:
+            print("fastqs put through pipeline: ")
+            for fastq in fastqs_to_analyze:
+                print(fastq)
+                
+        print("\nGenerating FastQC reports for fastq files and filtering low quality reads...")
         os.mkdir(args.pathToFastqs + '/fastQC_results')
         filtered_paths = []
-        fastqs = os.listdir(args.pathToFastqs)
-        for file in fastqs:
-            if file.endswith(".fq") or file.endswith("fastq"):
-                # run fastqc
-                fastqc_command = "~/Tools2/FastQC/fastqc " + args.pathToFastqs + '/' + file + ' -q -o ' +  args.pathToFastqs + '/fastQC_results/'
-                fastqc_run = subprocess.run(fastqc_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
-                Log.write("FastQC log:\n" + fastqc_run.stderr.decode() + "\n" + fastqc_run.stdout.decode() + "\n")
-                #outLog.write("FastQC standard out:\n" + fastqc_run.stdout.decode() + "\n")
-                if fastqc_run.returncode != 0:
-                    print("Problem with FastQC")
-                    exit(2)
-                # use function above to filter fastq
-                filtered_fastq = filterFastq(args.pathToFastqs + '/' + file) # this will filter and return the path to the filtered fastq
-                filtered_paths.append(filtered_fastq)
-            
+        for fastq in fastqs_to_analyze:
+            # run fastqc
+            fastqc_command = "~/Tools2/FastQC/fastqc " + args.pathToFastqs + '/' + fastq + ' -q -o ' +  args.pathToFastqs + '/fastQC_results/'
+            fastqc_run = subprocess.run(fastqc_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+            Log.write("FastQC log:\n" + fastqc_run.stderr.decode() + "\n" + fastqc_run.stdout.decode() + "\n")
+            #outLog.write("FastQC standard out:\n" + fastqc_run.stdout.decode() + "\n")
+            if fastqc_run.returncode != 0:
+                print("Problem with FastQC")
+                exit(2)
+            # use function above to filter fastq
+            filtered_fastq = filterFastq(args.pathToFastqs + '/' + fastq) # this will filter and return the path to the filtered fastq
+            filtered_paths.append(filtered_fastq)            
         
         print("Aligning with " + aligner + "...")
         os.mkdir(args.pathToFastqs + '/bam_files')
@@ -232,14 +284,17 @@ def main():
             if samtools_index_run.returncode != 0:
                 print("Problem indexing BAM")
                 exit(2)
+                
+        
 
-        '''
+        
         print("Making bigWigs normalized to counts per million...")
         os.mkdir(args.pathToFastqs + '/bigwigs')
+        bigwigs = []
         for bam_file in bam_files:
             bam_basename = os.path.basename(bam_file)
             bam_basename_noend = ".".join(bam_basename.split(".")[0:-1]) # this will split on period, remove the last thing, then rejoin (in case there is more than one period)
-            
+            bigwigs.append(args.pathToFastqs + '/bigwigs/' + bam_basename_noend + ".bw") # make a list of bigwig path to use later on in deeptools computeMatrix
             bigwig_command = "bamCoverage -b " + bam_file + " -o " + args.pathToFastqs + '/bigwigs/' + bam_basename_noend + ".bw --normalizeUsing CPM"
             bigwig_run = subprocess.run(bigwig_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
             Log.write("deepTools bamCoverage log:\n" + bigwig_run.stderr.decode() + "\n" + bigwig_run.stdout.decode() + "\n")
@@ -247,8 +302,6 @@ def main():
             if bigwig_run.returncode != 0:
                 print("Problem making bigwig")
                 exit(2)
-        '''
-        
         if args.pcaCorr == 'TRUE' or args.pcaCorr == "True":
             # PCA and correlations with deeptools
             print("Performing multiBamSummary, PCA, correlation with BAM files...")
@@ -278,9 +331,62 @@ def main():
             if plotCorrelation_run.returncode != 0:
                 print("Problem with deeptools plotCorrelation")
                 exit(6)
+        
+        
+        if args.tssPlot == 'True' or args.tssPlot == 'TRUE':
+            print("Generating plots of signal over TSS with deeptools...")
+            os.mkdir(args.pathToFastqs + '/deeptools_TSSplot')
+            gff3filename = "Mus_musculus.GRCm38.98.gff3" # this needs to be downloaded eventually (or check if its already there), amybe make an agument with the path?
+            tss_bed = gff_to_TSS(gff3filename) # this will write the bed file with the TSS's and also return the path to that file
+            
+            bigwig_string = " ".join(bigwigs)
+            now = datetime.today().isoformat()
+            now = now.replace("-", "_")
+            now = now.replace(":", ".")
+            computeMatrix_command = "computeMatrix reference-point -R " + tss_bed + " -S " + bigwig_string + " -o " + args.pathToFastqs + '/deeptools_TSSplot/computematrix' + now + ".mat" + " --beforeRegionStartLength 1000 --afterRegionStartLength 1000"
+            computeMatrix_run = subprocess.run(computeMatrix_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+            Log.write("deepTools computeMatrix log:\n" + computeMatrix_run.stderr.decode() + "\n" + computeMatrix_run.stdout.decode() + "\n")
+            if computeMatrix_run.returncode != 0:
+                print("Problem with deeptools computeMatrix")
+                exit(6)
+            
+            plotProfile_indiv_command = "plotProfile -m " + args.pathToFastqs + '/deeptools_TSSplot/computematrix' + now + ".mat" + " -o " + args.pathToFastqs + '/deeptools_TSSplot/individual_plotProfile' + now + ".pdf" 
+            plotProfile_indiv_run = subprocess.run(plotProfile_indiv_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+            Log.write("deepTools plotProfile-individual log:\n" + plotProfile_indiv_run.stderr.decode() + "\n" + plotProfile_indiv_run.stdout.decode() + "\n")
+            if plotProfile_indiv_run.returncode != 0:
+                print("Problem with deeptools plotProfile (individual)")
+                exit(10)   
+            
+            plotProfile_group_command = "plotProfile -m " + args.pathToFastqs + '/deeptools_TSSplot/computematrix' + now + ".mat" + " -o " + args.pathToFastqs + '/deeptools_TSSplot/group_plotProfile' + now + ".pdf --perGroup" 
+            plotProfile_group_run = subprocess.run(plotProfile_group_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+            Log.write("deepTools plotProfile-group log:\n" + plotProfile_group_run.stderr.decode() + "\n" + plotProfile_group_run.stdout.decode() + "\n")
+            if plotProfile_group_run.returncode != 0:
+                print("Problem with deeptools plotProfile (group)")
+                exit(10)
 
-        
-        
+                
+        if args.ngsPlot:
+            print("Generating plot of signal over specified regions with ngsplot...")
+            os.mkdir(args.pathToFastqs + '/ngsplots')
+            regions = args.ngsPlot
+            config_paths = []
+            for region in regions:
+                config_path = args.pathToFastqs + '/ngsplots/' + region + '_config.txt'
+                config_paths.append(config_path)
+                with open(config_path, "w") as config_file:
+                    for bam_file in bam_files: # iterate through the 'bam_files' variable made above
+                        bam_base = os.path.basename(bam_file)
+                        bam_base_noend = ".".join(bam_base.split(".")[0:-1])                   
+                        config_file.write(bam_file + "\t-1\t" + bam_base_noend + "\n")
+                if not args.ngsPlotExtra:
+                    args.ngsPlotExtra = " "
+                ngs_group_command = "ngs.plot.r -G " + genome + " -R " + region + " -C " +  config_path + " -O " + args.pathToFastqs + '/ngsplots/' + region + "_ngsPlot_group " + args.ngsPlotExtra
+                ngs_group_run = subprocess.run(ngs_group_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+                Log.write("ngsplot-group (" + region + ") log:\n" + ngs_group_run.stderr.decode() + "\n" + ngs_group_run.stdout.decode() + "\n")
+                if ngs_group_run.returncode != 0:
+                    print("Problem with ngsplot (group)")
+                    exit(10)
+            
         # peak calling
         if args.sampleSheet:
             print("Calling peaks...")
@@ -324,8 +430,8 @@ def main():
                 
         else:
             print("No sample sheet included, peaks will not be called.")
-
         
+                    
             
 if __name__ == '__main__':
 	main()
