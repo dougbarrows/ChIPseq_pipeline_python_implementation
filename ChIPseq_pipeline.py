@@ -7,6 +7,8 @@ import gzip
 import argparse
 import pandas as pd
 from datetime import datetime
+import multiprocessing as mp
+from itertools import chain
 
 # other things to add:
 ## read trimming
@@ -54,31 +56,7 @@ def gff_to_TSS(gff3filename):
                     else:
                         outputfile.write(bed_line.format(data['seqid'], int(data['start']), int(data['start']) + 1, gene_name, '', strand))
         return(outputfilename)
-
-def filterFastq(fastqPath):
-    if fastqPath.endswith(".fq"):
-        filteredPath = fastqPath[:-3] + "_filtered.fq"
-    if fastqPath.endswith(".fq.gz"):
-        filteredPath = fastqPath[:-6] + "_filtered.fq"
-    if fastqPath.endswith(".fastq"):
-        filteredPath = fastqPath[:-6] + "_filtered.fastq"
-    if fastqPath.endswith(".fastq.gz"):
-        filteredPath = fastqPath[:-9] + "_filtered.fastq"
-    with gzip.open(r"{}".format(fastqPath), "rt") as fo, open(r"{}".format(filteredPath), "w") as filter_fo:
-        record_all = []
-        seq = []
-        for record in SeqIO.parse(fo, "fastq"):
-            if record.seq.count("N") < 10: # reads with less than 10 "N" will be passed on
-                count = 0
-                for qual in record.letter_annotations["phred_quality"]:
-                    if qual < 20:
-                        count += 1
-                poor_perc = count / len(record.letter_annotations["phred_quality"]) # this will calculate the percentage of bases with a score less than 20 (which means a 1% chance of being wrong)
-                if poor_perc < 0.6:       
-                    SeqIO.write(record, filter_fo, "fastq")
-    return(filteredPath)
-     
-        
+    
 def downloadFasta(species):
     # download 'soft-masked' primary assembly genomes per this thread - https://bioinformatics.stackexchange.com/questions/540/what-ensembl-genome-version-should-i-use-for-alignments-e-g-toplevel-fa-vs-p
     possible_genomes = ["hg38", "hg19", "mm10"]
@@ -108,7 +86,123 @@ def downloadFasta(species):
         print('\n\n{} was successfully downloaded.'.format(newName) )
     return(newName)
        
+def filterFastq(fastqPath):
+    if fastqPath.endswith(".fq"):
+        filteredPath = fastqPath[:-3] + "_filtered.fq"
+    if fastqPath.endswith(".fq.gz"):
+        filteredPath = fastqPath[:-6] + "_filtered.fq"
+    if fastqPath.endswith(".fastq"):
+        filteredPath = fastqPath[:-6] + "_filtered.fastq"
+    if fastqPath.endswith(".fastq.gz"):
+        filteredPath = fastqPath[:-9] + "_filtered.fastq"
+    if fastqPath.endswith(".fq.gz") or fastqPath.endswith(".fastq.gz"):
+        with gzip.open(r"{}".format(fastqPath), "rt") as fo, open(r"{}".format(filteredPath), "w") as filter_fo:
+            record_all = []
+            seq = []
+            for record in SeqIO.parse(fo, "fastq"):
+                if record.seq.count("N") < 10: # reads with less than 10 "N" will be passed on
+                    count = 0
+                    for qual in record.letter_annotations["phred_quality"]:
+                        if qual < 20:
+                            count += 1
+                    poor_perc = count / len(record.letter_annotations["phred_quality"]) # this will calculate the percentage of bases with a score less than 20 (which means a 1% chance of being wrong)
+                    if poor_perc < 0.6:       
+                        SeqIO.write(record, filter_fo, "fastq")
+    if fastqPath.endswith(".fq") or fastqPath.endswith(".fastq"):
+        with open(r"{}".format(fastqPath), "rt") as fo, open(r"{}".format(filteredPath), "w") as filter_fo:
+            record_all = []
+            seq = []
+            for record in SeqIO.parse(fo, "fastq"):
+                if record.seq.count("N") < 10: # reads with less than 10 "N" will be passed on
+                    count = 0
+                    for qual in record.letter_annotations["phred_quality"]:
+                        if qual < 20:
+                            count += 1
+                    poor_perc = count / len(record.letter_annotations["phred_quality"]) # this will calculate the percentage of bases with a score less than 20 (which means a 1% chance of being wrong)
+                    if poor_perc < 0.6:       
+                        SeqIO.write(record, filter_fo, "fastq")
+    return(filteredPath)
+     
+def fastqc_and_filter(path_to_each_fastq):
+    fastqc_command = "~/Tools2/FastQC/fastqc " + path_to_each_fastq + ' -q -o ' +  os.path.dirname(path_to_each_fastq) + '/fastQC_results/'
+    fastqc_run = subprocess.run(fastqc_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+    for_log = "FastQC log for " + os.path.basename(path_to_each_fastq) + ":\n" + fastqc_run.stderr.decode() + "\n" + fastqc_run.stdout.decode() + "\n"
+    #outLog.write("FastQC standard out:\n" + fastqc_run.stdout.decode() + "\n")
+    if fastqc_run.returncode != 0:
+        print("Problem with FastQC")
+        #return("FastQC log:\n" + fastqc_run.stderr.decode() + "\n" + fastqc_run.stdout.decode() + "\n")
+    # use function above to filter fastq
+    filtered_fastq = filterFastq(path_to_each_fastq) # this will filter and return the path to the filtered fastq
+    return(filtered_fastq, for_log) # just for clarity sake I make another line to show I am returning the path to the filtered fastq
+    
+    
+def align_sort_markDups_index_bam(fastq, aligner, fasta, path_to_fastq_dir, remove_dups):
+    bam_files = []
+    #for fastq in filtered_paths:
+    fastq_basename = os.path.basename(fastq)
+    fastq_basename_noend = ".".join(fastq_basename.split(".")[0:-1]) # this will split on period, remove the last thing, then rejoin (in case there is more than one period)
+            
+    if aligner ==  'bwa-mem':
+        align_command = "bwa mem " + fasta + " " + fastq + " | samtools view -b - > " + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + ".bam"
+    else:
+        align_command = "bowtie2 -x " + fasta + " -U " + fastq + " | samtools view -b - > " + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + ".bam"
+    align_run = subprocess.run(align_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+    for_log_align = aligner + " log for " + fastq_basename + ":\n" + align_run.stderr.decode() + "\n" + align_run.stdout.decode() + "\n"
+    if align_run.returncode != 0:
+        print("Problem aligning with " + aligner + "!")
+        exit(2)
 
+    samtools_sort_command = "samtools sort " + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + ".bam -o " + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + "_sorted.bam"
+    samtools_sort_run = subprocess.run(samtools_sort_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+    for_log_samtools_sort = "samtools sort log for " + fastq_basename + ":\n" + samtools_sort_run.stderr.decode() + "\n" + samtools_sort_run.stdout.decode() + "\n"
+    if samtools_sort_run.returncode != 0:
+        print("Problem sorting BAM")
+        exit(2)
+    os.remove(path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + ".bam")
+            
+            
+    # finding the number of duplicates and removing if specified               
+               
+    if remove_dups:
+        picard_dup_command = "java -jar ~/Tools2/picard.jar MarkDuplicates I=" + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + "_sorted.bam O=" + path_to_fastq_dir + '/bam_files/'+ fastq_basename_noend + "_sorted_rmdup.bam M=" + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + "_sorted.metrics REMOVE_DUPLICATES=TRUE"
+        picard_dup_run = subprocess.run(picard_dup_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+        for_log_mark_dups = "MarkDuplicates log for " + fastq_basename + ":\n" + picard_dup_run.stderr.decode() + "\n" + picard_dup_run.stdout.decode() + "\n"
+        if picard_dup_run.returncode != 0:
+            print("Problem flagging duplicates")
+            exit(2)
+        bam_files.append(path_to_fastq_dir + '/bam_files/'+ fastq_basename_noend + "_sorted_rmdup.bam")
+    else:
+        picard_dup_command = "java -jar ~/Tools2/picard.jar MarkDuplicates I=" + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + "_sorted.bam O=" + path_to_fastq_dir + '/bam_files/'+ fastq_basename_noend + "_sorted_mdup.bam M=" + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + "_sorted.metrics"
+        picard_dup_run = subprocess.run(picard_dup_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+        for_log_mark_dups = "MarkDuplicates log for " + fastq_basename + ":\n" + picard_dup_run.stderr.decode() + "\n" + picard_dup_run.stdout.decode() + "\n"
+        if picard_dup_run.returncode != 0:
+            print("Problem flagging duplicates")
+            exit(2)
+        bam_files.append(path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + "_sorted_mdup.bam")
+                
+
+    samtools_index_command = "samtools index " + bam_files[len(bam_files) - 1]
+    samtools_index_run = subprocess.run(samtools_index_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+    for_log_samtools_index = "samtools index log for " + fastq_basename + ":\n" + samtools_index_run.stderr.decode() + "\n" + samtools_index_run.stdout.decode() + "\n"
+    if samtools_index_run.returncode != 0:
+        print("Problem indexing BAM")
+        exit(2)
+                
+    return(bam_files, for_log_align, for_log_samtools_sort, for_log_mark_dups, for_log_samtools_index)
+
+def make_bigwig(bam_file, path_to_fastq_dir):
+    bam_basename = os.path.basename(bam_file)
+    bigwigs = []
+    bam_basename_noend = ".".join(bam_basename.split(".")[0:-1]) # this will split on period, remove the last thing, then rejoin (in case there is more than one period)
+    bigwigs.append(path_to_fastq_dir + '/bigwigs/' + bam_basename_noend + ".bw") # make a list of bigwig path to use later on in deeptools computeMatrix
+    bigwig_command = "bamCoverage -b " + bam_file + " -o " + path_to_fastq_dir + '/bigwigs/' + bam_basename_noend + ".bw --normalizeUsing CPM"
+    bigwig_run = subprocess.run(bigwig_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
+    for_log_bamCoverage = "deepTools bamCoverage log for " + bam_basename + ":\n" + bigwig_run.stderr.decode() + "\n" + bigwig_run.stdout.decode() + "\n"
+    if bigwig_run.returncode != 0:
+        print("Problem making bigwig")
+        exit(2)
+    return(bigwigs, for_log_bamCoverage)
+    
 def main():
     parser = argparse.ArgumentParser(description="""
         Pipeline for ChIPseq 
@@ -126,18 +220,24 @@ def main():
     parser.add_argument('-t', '--tssPlot', choices = ['True', 'False'], help="Output a signal plot over TSS.")
     parser.add_argument('-n', '--ngsPlot', choices = ['tss', 'tes', 'genebody', 'exon'], nargs = '*', help="Output a signal plot over the specified region type.")
     parser.add_argument('-N', '--ngsPlotExtra', help="A string to be added onto 'ngs.plot.r' command within the ngsplot package. The arguments (ngs.plot.r arguments, not from this pipeline) already included are -G, -R, -C, -O.  Make sure to put in quotes. E.g. -N ' -D ensembl -FL 300'")
+    parser.add_argument('-w', '--numCores', type=int, help="Number of cores/workers to use in parallelizing code")
 
     args = parser.parse_args()
     
-    pathtoFastqs = args.pathToFastqs
+    path_to_fastq_dir = args.pathToFastqs
     
-                
-       
+    if args.remove_duplicates:
+        remove_dups = True
+        
     if args.genome:
         genome = args.genome
+    
+    if args.numCores:
+        cores = args.numCores
+    else:
+        cores = 1
         
-    Log_path = pathtoFastqs + "/StdError_Stdout_log.txt"
-    #outLog_path = pathtoFastqs + "/Standard_out_log"
+    Log_path = path_to_fastq_dir + "/StdError_Stdout_log.txt"
     
     # set the aligner to be bwa-mem if nothing was input
     if not args.aligner:
@@ -188,7 +288,6 @@ def main():
                 index_command = "bowtie2-build " + fasta + " " + fasta
             index_run = subprocess.run(index_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
             Log.write(indexer + " log:\n" + index_run.stderr.decode() + "\n" + index_run.stdout.decode() + "\n")
-            #outLog.write(indexer + " standard out:\n" + index_run.stdout.decode() + "\n")
             if index_run.returncode != 0:
                 print("Problem indexing with " + indexer)
                 exit(2)
@@ -209,105 +308,74 @@ def main():
                 
         print("\nGenerating FastQC reports for fastq files and filtering low quality reads...")
         os.mkdir(args.pathToFastqs + '/fastQC_results')
-        filtered_paths = []
+        path_to_each_fastq = []
         for fastq in fastqs_to_analyze:
-            # run fastqc
-            fastqc_command = "~/Tools2/FastQC/fastqc " + args.pathToFastqs + '/' + fastq + ' -q -o ' +  args.pathToFastqs + '/fastQC_results/'
-            fastqc_run = subprocess.run(fastqc_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
-            Log.write("FastQC log:\n" + fastqc_run.stderr.decode() + "\n" + fastqc_run.stdout.decode() + "\n")
-            #outLog.write("FastQC standard out:\n" + fastqc_run.stdout.decode() + "\n")
-            if fastqc_run.returncode != 0:
-                print("Problem with FastQC")
-                exit(2)
-            # use function above to filter fastq
-            filtered_fastq = filterFastq(args.pathToFastqs + '/' + fastq) # this will filter and return the path to the filtered fastq
-            filtered_paths.append(filtered_fastq)            
+            path_to_each_fastq.append( args.pathToFastqs + "/" + fastq)
+            
+        filtered_paths = []
+        
+        pool = mp.Pool(cores)
+        filtered_paths, for_log = zip(*pool.map(fastqc_and_filter, path_to_each_fastq))# this outputs two tuples, one with the path to filtered fastqs and one with the log for each
+        pool.close()
+        
+        Log.write("\n".join(for_log))                
         
         print("Aligning with " + aligner + "...")
         os.mkdir(args.pathToFastqs + '/bam_files')
-        if args.remove_duplicates  == 'TRUE' or args.remove_duplicates == 'True':
+        if args.remove_duplicates:
                 print('Duplicates will be removed...')
         else:
                 print("Duplicates will NOT be removed, but will be flagged in the bam file...")
-        bam_files = []
-        for fastq in filtered_paths:
-            fastq_basename = os.path.basename(fastq)
-            fastq_basename_noend = ".".join(fastq_basename.split(".")[0:-1]) # this will split on period, remove the last thing, then rejoin (in case there is more than one period)
-            
-            if aligner ==  'bwa-mem':
-                align_command = "bwa mem " + fasta + " " + fastq + " | samtools view -b - > " + args.pathToFastqs + '/bam_files/' + fastq_basename_noend + ".bam"
-            else:
-                align_command = "bowtie2 -x " + fasta + " -U " + fastq + " | samtools view -b - > " + args.pathToFastqs + '/bam_files/' + fastq_basename_noend + ".bam"
-            align_run = subprocess.run(align_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
-            Log.write(aligner + " log:\n" + align_run.stderr.decode() + "\n" + align_run.stdout.decode() + "\n")
-            #outLog.write(aligner + " standard out:\n" + align_run.stdout.decode() + "\n")
-            if align_run.returncode != 0:
-                print("Problem aligning with " + aligner + "!")
-                exit(2)
-
-            samtools_sort_command = "samtools sort " + args.pathToFastqs + '/bam_files/' + fastq_basename_noend + ".bam -o " + args.pathToFastqs + '/bam_files/' + fastq_basename_noend + "_sorted.bam"
-            samtools_sort_run = subprocess.run(samtools_sort_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
-            Log.write("samtools sort log:\n" + samtools_sort_run.stderr.decode() + "\n" + samtools_sort_run.stdout.decode() + "\n")
-            #outLog.write("samtools sort bamCoverage standard out:\n" + samtools_sort_run.stdout.decode() + "\n")
-            if samtools_sort_run.returncode != 0:
-                print("Problem sorting BAM")
-                exit(2)
-            os.remove(args.pathToFastqs + '/bam_files/' + fastq_basename_noend + ".bam")
-            
-            
-            # finding the number of duplicates and removing if specified               
-               
-            if args.remove_duplicates  == 'TRUE' or args.remove_duplicates == 'True':
-                picard_dup_command = "java -jar ~/Tools2/picard.jar MarkDuplicates I=" + args.pathToFastqs + '/bam_files/' + fastq_basename_noend + "_sorted.bam O=" + args.pathToFastqs + '/bam_files/'+ fastq_basename_noend + "_sorted_rmdup.bam M=" + args.pathToFastqs + '/bam_files/' + fastq_basename_noend + "_sorted.metrics REMOVE_DUPLICATES=TRUE"
-                picard_dup_run = subprocess.run(picard_dup_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
-                Log.write("MarkDuplicates log:\n" + picard_dup_run.stderr.decode() + "\n" + picard_dup_run.stdout.decode() + "\n")
-                #outLog.write("MarkDuplicates standard out:\n" + picard_dup_run.stdout.decode() + "\n")
-                if picard_dup_run.returncode != 0:
-                    print("Problem flagging duplicates")
-                    exit(2)
-                bam_files.append(args.pathToFastqs + '/bam_files/'+ fastq_basename_noend + "_sorted_rmdup.bam")
-            else:
-                picard_dup_command = "java -jar ~/Tools2/picard.jar MarkDuplicates I=" + args.pathToFastqs + '/bam_files/' + fastq_basename_noend + "_sorted.bam O=" + args.pathToFastqs + '/bam_files/'+ fastq_basename_noend + "_sorted_mdup.bam M=" + args.pathToFastqs + '/bam_files/' + fastq_basename_noend + "_sorted.metrics"
-                picard_dup_run = subprocess.run(picard_dup_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
-                Log.write("MarkDuplicates log:\n" + picard_dup_run.stderr.decode() + "\n" + picard_dup_run.stdout.decode() + "\n")
-                #outLog.write("MarkDuplicates standard out:\n" + picard_dup_run.stdout.decode() + "\n")
-                if picard_dup_run.returncode != 0:
-                    print("Problem flagging duplicates")
-                    exit(2)
-                bam_files.append(args.pathToFastqs + '/bam_files/' + fastq_basename_noend + "_sorted_mdup.bam")
-                
-
-            samtools_index_command = "samtools index " + bam_files[len(bam_files) - 1]
-            samtools_index_run = subprocess.run(samtools_index_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
-            Log.write("samtools index log:\n" + samtools_index_run.stderr.decode() + "\n" + samtools_index_run.stdout.decode() + "\n")
-            #outLog.write("samtools index standard out:\n" + samtools_index_run.stdout.decode() + "\n")
-            if samtools_index_run.returncode != 0:
-                print("Problem indexing BAM")
-                exit(2)
-                
         
+        filtered_paths = list(filtered_paths) # this is a tuple from the multiprocess before, so convert to a list
+        aligner_list = ([aligner] * len(filtered_paths))
+        fasta_list = ([fasta] * len(filtered_paths))
+        path_to_fastq_dir_list = ([path_to_fastq_dir] * len(filtered_paths))
+        remove_dups_list = ([remove_dups] * len(filtered_paths))
+        
+        # the arguments for starmap must be a list of lists, with each list contiang the arguments for each iteration through the function used in starmap
+        input_list = []
+        for i in range(len(filtered_paths)):
+            input_list.append([filtered_paths[i], 
+                             aligner_list[i], 
+                             fasta_list[i], 
+                             path_to_fastq_dir_list[i], 
+                             remove_dups_list[i]])
+        
+        pool = mp.Pool(cores)
+        bam_files, for_log_align, for_log_samtools_sort, for_log_mark_dups, for_log_samtools_index = zip(*pool.starmap(align_sort_markDups_index_bam, input_list))
+        pool.close()
+       
+        Log.write("\n".join(for_log_align)) 
+        Log.write("\n".join(for_log_samtools_sort))
+        Log.write("\n".join(for_log_mark_dups))
+        Log.write("\n".join(for_log_samtools_index)) 
 
+        bam_files_list = list(bam_files)
+        bam_files_list = list(chain.from_iterable(bam_files_list))
+        # this comes out as as tuple from the above multiprocess command, so convert to a list to iterate below
         
         print("Making bigWigs normalized to counts per million...")
         os.mkdir(args.pathToFastqs + '/bigwigs')
-        bigwigs = []
-        for bam_file in bam_files:
-            bam_basename = os.path.basename(bam_file)
-            bam_basename_noend = ".".join(bam_basename.split(".")[0:-1]) # this will split on period, remove the last thing, then rejoin (in case there is more than one period)
-            bigwigs.append(args.pathToFastqs + '/bigwigs/' + bam_basename_noend + ".bw") # make a list of bigwig path to use later on in deeptools computeMatrix
-            bigwig_command = "bamCoverage -b " + bam_file + " -o " + args.pathToFastqs + '/bigwigs/' + bam_basename_noend + ".bw --normalizeUsing CPM"
-            bigwig_run = subprocess.run(bigwig_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
-            Log.write("deepTools bamCoverage log:\n" + bigwig_run.stderr.decode() + "\n" + bigwig_run.stdout.decode() + "\n")
-            #outLog.write("deepTools bamCoverage standard out:\n" + bigwig_run.stdout.decode() + "\n")
-            if bigwig_run.returncode != 0:
-                print("Problem making bigwig")
-                exit(2)
+
+        
+        input_list_bw = []
+        for i in range(len(bam_files_list)):
+            input_list_bw.append([bam_files_list[i],
+                                  path_to_fastq_dir_list[i]])
+                    
+        pool = mp.Pool(cores)
+        bigwigs, for_log_bamCoverage = zip(*pool.starmap(make_bigwig, input_list_bw))
+        pool.close()
+        
+        Log.write("\n".join(for_log_bamCoverage)) 
+        
         if args.pcaCorr == 'TRUE' or args.pcaCorr == "True":
             # PCA and correlations with deeptools
             print("Performing multiBamSummary, PCA, correlation with BAM files...")
             os.mkdir(args.pathToFastqs + '/bam_deepTools_pcaCorr')
 
-            bam_files_string = " ".join(bam_files)
+            bam_files_string = " ".join(bam_files_list)
             now = datetime.today().isoformat()
             now = now.replace("-", "_")
             now = now.replace(":", ".")
@@ -374,7 +442,7 @@ def main():
                 config_path = args.pathToFastqs + '/ngsplots/' + region + '_config.txt'
                 config_paths.append(config_path)
                 with open(config_path, "w") as config_file:
-                    for bam_file in bam_files: # iterate through the 'bam_files' variable made above
+                    for bam_file in bam_files_list: # iterate through the 'bam_files' variable made above
                         bam_base = os.path.basename(bam_file)
                         bam_base_noend = ".".join(bam_base.split(".")[0:-1])                   
                         config_file.write(bam_file + "\t-1\t" + bam_base_noend + "\n")
