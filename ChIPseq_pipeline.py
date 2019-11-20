@@ -136,27 +136,27 @@ def fastqc_and_filter(path_to_each_fastq):
     return(filtered_fastq, for_log) # just for clarity sake I make another line to show I am returning the path to the filtered fastq
     
     
-def align_sort_markDups_index_bam(fastq, aligner, fasta, path_to_fastq_dir, remove_dups):
-    bam_files = []
+def align_sort_markDups_index_bam(fastq, aligner, fasta, path_to_fastq_dir, remove_dups, cores):
+
     #for fastq in filtered_paths:
     fastq_basename = os.path.basename(fastq)
     fastq_basename_noend = ".".join(fastq_basename.split(".")[0:-1]) # this will split on period, remove the last thing, then rejoin (in case there is more than one period)
             
     if aligner ==  'bwa-mem':
-        align_command = "bwa mem " + fasta + " " + fastq + " | samtools view -b - > " + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + ".bam"
+        align_command = "bwa mem " + fasta + " " + fastq + " -t " + str(cores) + " | samtools view -b - > " + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + ".bam"
     else:
-        align_command = "bowtie2 -x " + fasta + " -U " + fastq + " | samtools view -b - > " + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + ".bam"
+        align_command = "bowtie2 -x " + fasta + " -U " + fastq + " -p " + str(cores) + " | samtools view -b - > " + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + ".bam"
     align_run = subprocess.run(align_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
     for_log_align = aligner + " log for " + fastq_basename + ":\n" + align_run.stderr.decode() + "\n" + align_run.stdout.decode() + "\n"
     if align_run.returncode != 0:
-        print("Problem aligning with " + aligner + "!")
+        print("Problem aligning with " + aligner + ": \n" + align_run.stderr.decode() + "\n" + align_run.stdout.decode() + "\n")
         exit(2)
 
-    samtools_sort_command = "samtools sort " + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + ".bam -o " + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + "_sorted.bam"
+    samtools_sort_command = "samtools sort " + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + ".bam -o " + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + "_sorted.bam -@ " + str(cores)
     samtools_sort_run = subprocess.run(samtools_sort_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
     for_log_samtools_sort = "samtools sort log for " + fastq_basename + ":\n" + samtools_sort_run.stderr.decode() + "\n" + samtools_sort_run.stdout.decode() + "\n"
     if samtools_sort_run.returncode != 0:
-        print("Problem sorting BAM")
+        print("Problem sorting BAM : \n" + samtools_sort_run.stderr.decode() + "\n" + samtools_sort_run.stdout.decode() + "\n")
         exit(2)
     os.remove(path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + ".bam")
             
@@ -168,20 +168,20 @@ def align_sort_markDups_index_bam(fastq, aligner, fasta, path_to_fastq_dir, remo
         picard_dup_run = subprocess.run(picard_dup_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
         for_log_mark_dups = "MarkDuplicates log for " + fastq_basename + ":\n" + picard_dup_run.stderr.decode() + "\n" + picard_dup_run.stdout.decode() + "\n"
         if picard_dup_run.returncode != 0:
-            print("Problem flagging duplicates")
+            print("Problem flagging duplicates \n" + picard_dup_run.stderr.decode() + "\n" + picard_dup_run.stdout.decode() + "\n")
             exit(2)
-        bam_files.append(path_to_fastq_dir + '/bam_files/'+ fastq_basename_noend + "_sorted_rmdup.bam")
+        bam_files = path_to_fastq_dir + '/bam_files/'+ fastq_basename_noend + "_sorted_rmdup.bam"
     else:
         picard_dup_command = "java -jar ~/Tools2/picard.jar MarkDuplicates I=" + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + "_sorted.bam O=" + path_to_fastq_dir + '/bam_files/'+ fastq_basename_noend + "_sorted_mdup.bam M=" + path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + "_sorted.metrics"
         picard_dup_run = subprocess.run(picard_dup_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
         for_log_mark_dups = "MarkDuplicates log for " + fastq_basename + ":\n" + picard_dup_run.stderr.decode() + "\n" + picard_dup_run.stdout.decode() + "\n"
         if picard_dup_run.returncode != 0:
-            print("Problem flagging duplicates")
+            print("Problem flagging duplicates \n" + picard_dup_run.stderr.decode() + "\n" + picard_dup_run.stdout.decode() + "\n")
             exit(2)
-        bam_files.append(path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + "_sorted_mdup.bam")
+        bam_files = path_to_fastq_dir + '/bam_files/' + fastq_basename_noend + "_sorted_mdup.bam"
                 
 
-    samtools_index_command = "samtools index " + bam_files[len(bam_files) - 1]
+    samtools_index_command = "samtools index " + bam_files
     samtools_index_run = subprocess.run(samtools_index_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
     for_log_samtools_index = "samtools index log for " + fastq_basename + ":\n" + samtools_index_run.stderr.decode() + "\n" + samtools_index_run.stdout.decode() + "\n"
     if samtools_index_run.returncode != 0:
@@ -327,11 +327,13 @@ def main():
         else:
                 print("Duplicates will NOT be removed, but will be flagged in the bam file...")
         
+        '''
         filtered_paths = list(filtered_paths) # this is a tuple from the multiprocess before, so convert to a list
         aligner_list = ([aligner] * len(filtered_paths))
         fasta_list = ([fasta] * len(filtered_paths))
         path_to_fastq_dir_list = ([path_to_fastq_dir] * len(filtered_paths))
         remove_dups_list = ([remove_dups] * len(filtered_paths))
+        cores_list = ([cores] * len(filtered_paths))
         
         # the arguments for starmap must be a list of lists, with each list contiang the arguments for each iteration through the function used in starmap
         input_list = []
@@ -340,24 +342,56 @@ def main():
                              aligner_list[i], 
                              fasta_list[i], 
                              path_to_fastq_dir_list[i], 
-                             remove_dups_list[i]])
+                             remove_dups_list[i],
+                             cores_list[i]])
         
-        pool = mp.Pool(cores)
+        pool = mp.Pool(1)
         bam_files, for_log_align, for_log_samtools_sort, for_log_mark_dups, for_log_samtools_index = zip(*pool.starmap(align_sort_markDups_index_bam, input_list))
         pool.close()
-       
-        Log.write("\n".join(for_log_align)) 
-        Log.write("\n".join(for_log_samtools_sort))
-        Log.write("\n".join(for_log_mark_dups))
-        Log.write("\n".join(for_log_samtools_index)) 
+        '''
+        
+        bam_files_list = []
+        '''
+        for_log_align_list = []
+        for_log_samtools_sort_list = []
+        for_log_mark_dups_list = []
+        for_log_samtools_index_list = []
+        '''
+            
+        for fastq in filtered_paths:
+            bam_files, for_log_align, for_log_samtools_sort, for_log_mark_dups, for_log_samtools_index = align_sort_markDups_index_bam(fastq, aligner, fasta, path_to_fastq_dir, remove_dups, cores)
 
+            bam_files_list.append(bam_files)
+            Log.write(for_log_align + "\n") 
+            Log.write(for_log_samtools_sort + "\n")
+            Log.write(for_log_mark_dups + "\n")
+            Log.write(for_log_samtools_index + "\n")
+            
+            
+            
+            '''
+            for_log_align_list = for_log_align_list.append()
+            for_log_samtools_sort_list = for_log_samtools_sort_list.append()
+            for_log_mark_dups_list = for_log_mark_dups_list.append()
+            for_log_samtools_index_list = for_log_samtools_index_list.append()
+            
+       
+        Log.write("\n".join(for_log_align_list)) 
+        Log.write("\n".join(for_log_samtools_sort_list))
+        Log.write("\n".join(for_log_mark_dups_list))
+        Log.write("\n".join(for_log_samtools_index_list)) 
+
+        
         bam_files_list = list(bam_files)
         bam_files_list = list(chain.from_iterable(bam_files_list))
         # this comes out as as tuple from the above multiprocess command, so convert to a list to iterate below
-        
+        '''
+
         print("Making bigWigs normalized to counts per million...")
         os.mkdir(args.pathToFastqs + '/bigwigs')
 
+        
+        path_to_fastq_dir_list = ([path_to_fastq_dir] * len(filtered_paths))
         
         input_list_bw = []
         for i in range(len(bam_files_list)):
