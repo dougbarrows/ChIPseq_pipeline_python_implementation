@@ -418,21 +418,18 @@ def main():
             Log.write("deepTools multiBamSummary log:\n" + multiBamSummary_run.stderr.decode() + "\n" + multiBamSummary_run.stdout.decode() + "\n")
             if multiBamSummary_run.returncode != 0:
                 print("Problem with deeptools multiBamSummary")
-                exit(2)
 
             plotPCA_command = "plotPCA --corData " + args.pathToFastqs + "/bam_deepTools_pcaCorr/multiBamSummary" + now + ".npz" + " --plotFile " + args.pathToFastqs + "/bam_deepTools_pcaCorr/multiBamSummary" + now + "_PCA.pdf" 
             plotPCA_run = subprocess.run(plotPCA_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
             Log.write("deepTools plotPCA log:\n" + plotPCA_run.stderr.decode() + "\n" + plotPCA_run.stdout.decode() + "\n")
             if plotPCA_run.returncode != 0:
                 print("Problem with deeptools plotPCA")
-                exit(5)
 
             plotCorrelation_command = "plotCorrelation --corData " + args.pathToFastqs + "/bam_deepTools_pcaCorr/multiBamSummary" + now + ".npz" + " --corMethod spearman --whatToPlot heatmap --plotFile " + args.pathToFastqs + "/bam_deepTools_pcaCorr/multiBamSummary" + now + "_corr.pdf" 
             plotCorrelation_run = subprocess.run(plotCorrelation_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
             Log.write("deepTools plotCorrelation log:\n" + plotCorrelation_run.stderr.decode() + "\n" + plotCorrelation_run.stdout.decode() + "\n")
             if plotCorrelation_run.returncode != 0:
                 print("Problem with deeptools plotCorrelation")
-                exit(6)
         
         
         if args.tssPlot == 'True' or args.tssPlot == 'TRUE':
@@ -450,25 +447,24 @@ def main():
             Log.write("deepTools computeMatrix log:\n" + computeMatrix_run.stderr.decode() + "\n" + computeMatrix_run.stdout.decode() + "\n")
             if computeMatrix_run.returncode != 0:
                 print("Problem with deeptools computeMatrix")
-                exit(6)
             
             plotProfile_indiv_command = "plotProfile -m " + args.pathToFastqs + '/deeptools_TSSplot/computematrix' + now + ".mat" + " -o " + args.pathToFastqs + '/deeptools_TSSplot/individual_plotProfile' + now + ".pdf" 
             plotProfile_indiv_run = subprocess.run(plotProfile_indiv_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
             Log.write("deepTools plotProfile-individual log:\n" + plotProfile_indiv_run.stderr.decode() + "\n" + plotProfile_indiv_run.stdout.decode() + "\n")
             if plotProfile_indiv_run.returncode != 0:
                 print("Problem with deeptools plotProfile (individual)")
-                exit(10)   
             
             plotProfile_group_command = "plotProfile -m " + args.pathToFastqs + '/deeptools_TSSplot/computematrix' + now + ".mat" + " -o " + args.pathToFastqs + '/deeptools_TSSplot/group_plotProfile' + now + ".pdf --perGroup" 
             plotProfile_group_run = subprocess.run(plotProfile_group_command, shell = True, stdout = subprocess.PIPE, stderr=subprocess.PIPE)
             Log.write("deepTools plotProfile-group log:\n" + plotProfile_group_run.stderr.decode() + "\n" + plotProfile_group_run.stdout.decode() + "\n")
             if plotProfile_group_run.returncode != 0:
                 print("Problem with deeptools plotProfile (group)")
-                exit(10)
 
                 
         if args.ngsPlot:
             print("Generating plot of signal over specified regions with ngsplot...")
+        
+                
             os.mkdir(args.pathToFastqs + '/ngsplots')
             regions = args.ngsPlot
             config_paths = []
@@ -487,7 +483,6 @@ def main():
                 Log.write("ngsplot-group (" + region + ") log:\n" + ngs_group_run.stderr.decode() + "\n" + ngs_group_run.stdout.decode() + "\n")
                 if ngs_group_run.returncode != 0:
                     print("Problem with ngsplot (group)")
-                    exit(10)
             
         # peak calling
         if args.sampleSheet:
@@ -495,6 +490,10 @@ def main():
             if not args.genome:
                 print("No reference genome or preferred genome was provided. Either use the '-f' argument if a reference fasta is present, or the '-g' argument to download a specific fasta from Ensembl.")
                 exit(4)
+                
+            if not args.extraPeakArgs:
+                args.extraPeakArgs = " " # throws an error is this is None type, so will just set to empty string if not put in by user
+                
             os.mkdir(args.pathToFastqs + '/peaks')
             ss = pd.read_csv(args.sampleSheet)
             if args.peakCaller == "macs2":
@@ -505,11 +504,11 @@ def main():
                         
                 for index, row in ss.iterrows():
                     input_noend = ".".join(row[2].split(".")[0:-1])
-                    for bam_file in bam_files:
+                    for bam_file in bam_files_list:
                         if re.search(input_noend, bam_file): # this will be a probelm when the fastq names are just longer versions of other fastqs. Just need to make sure the names are all unique without any substrings of other fastq names
                             input_bam = bam_file
                     peakfq_noend = ".".join(row[1].split(".")[0:-1])
-                    for bam_file in bam_files:
+                    for bam_file in bam_files_list:
                         if re.search(peakfq_noend, bam_file): # this will be a probelm when the fastq names are just longer versions of other fastqs. Just need to make sure the names are all unique without any substrings of other fastq names
                             peak_bam = bam_file
                     
