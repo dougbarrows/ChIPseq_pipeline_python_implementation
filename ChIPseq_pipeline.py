@@ -228,6 +228,8 @@ def main():
     
     if args.remove_duplicates:
         remove_dups = True
+    else:
+        remove_dups = False
         
     if args.genome:
         genome = args.genome
@@ -250,7 +252,7 @@ def main():
         aligner = 'bowtie2'
         indexer = "bowtie2-build"
     else:
-        print("Alinger must be 'bwa-mem' or 'bowtie2'")
+        print("Aligner must be 'bwa-mem' or 'bowtie2'")
     
     with open(Log_path, "w") as Log:
     
