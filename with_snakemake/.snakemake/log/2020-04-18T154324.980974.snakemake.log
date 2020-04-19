@@ -1,0 +1,3 @@
+Building DAG of jobs...
+MissingRuleException:
+No rule to produce /sorted_reads/NSC_input1_SRR5027801_filter_sample1000.bam.bai (if you use input functions make sure that they don't raise unexpected exceptions).

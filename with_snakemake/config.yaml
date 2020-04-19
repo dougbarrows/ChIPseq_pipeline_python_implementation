@@ -1,0 +1,5 @@
+samples:
+  NSC_input1_SRR5027801_filter_sample1000_filtered: fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000_filtered.fastq
+  NSC_input1_SRR5027801_filter_sample1000: fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000.fastq
+
+genome: ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa

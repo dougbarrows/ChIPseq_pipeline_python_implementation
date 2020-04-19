@@ -1,0 +1,40 @@
+Building DAG of jobs...
+Job counts:
+	count	jobs
+	1	all
+	1	bcftools_call
+	2	bwa_map
+	1	plot_quals
+	2	samtools_index
+	2	samtools_sort
+	9
+
+[Sat Apr 18 14:27:07 2020]
+rule bwa_map:
+    input: ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa
+    output: mapped_reads/NSC_input1_SRR5027801_filter_sample1000.bam
+    log: logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000.log
+    jobid: 7
+    wildcards: sample=NSC_input1_SRR5027801_filter_sample1000
+
+(bwa mem -R '@RG\tID:NSC_input1_SRR5027801_filter_sample1000\tSM:NSC_input1_SRR5027801_filter_sample1000' -t 1 ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa | samtools view -Sb - > mapped_reads/NSC_input1_SRR5027801_filter_sample1000.bam) 2> logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000.log
+
+[Sat Apr 18 14:27:07 2020]
+rule bwa_map:
+    input: ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa
+    output: mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam
+    log: logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000_filtered.log
+    jobid: 8
+    wildcards: sample=NSC_input1_SRR5027801_filter_sample1000_filtered
+
+(bwa mem -R '@RG\tID:NSC_input1_SRR5027801_filter_sample1000_filtered\tSM:NSC_input1_SRR5027801_filter_sample1000_filtered' -t 1 ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa | samtools view -Sb - > mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam) 2> logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000_filtered.log
+
+[Sat Apr 18 14:27:07 2020]
+rule samtools_sort:
+    input: mapped_reads/NSC_input1_SRR5027801_filter_sample1000.bam
+    output: sorted_reads/NSC_input1_SRR5027801_filter_sample1000.bam
+    jobid: 3
+    wildcards: sample=NSC_input1_SRR5027801_filter_sample1000
+
+RuleException in line 25 of /Users/douglasbarrows/Desktop/R_functions/ChIP-seq_pipeline/ChIPseq_pipeline_python_implementation/with_snakemake/Snakefile:
+NameError: The name 'wildcard' is unknown in this context. Please make sure that you defined that variable. Also note that braces not used for variable access have to be escaped by repeating them, i.e. {{print $1}}

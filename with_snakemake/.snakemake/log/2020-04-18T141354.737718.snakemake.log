@@ -1,0 +1,4 @@
+Building DAG of jobs...
+MissingInputException in line 45 of /Users/douglasbarrows/Desktop/R_functions/ChIP-seq_pipeline/ChIPseq_pipeline_python_implementation/with_snakemake/Snakefile:
+Missing input files for rule bcftools_call:
+data/genome.fa

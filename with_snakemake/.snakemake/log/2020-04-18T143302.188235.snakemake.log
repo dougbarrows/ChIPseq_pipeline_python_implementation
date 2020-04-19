@@ -1,0 +1,21 @@
+Building DAG of jobs...
+Job counts:
+	count	jobs
+	1	all
+	1	bcftools_call
+	2	bwa_map
+	1	plot_quals
+	2	samtools_index
+	2	samtools_sort
+	9
+
+[Sat Apr 18 14:33:02 2020]
+rule bwa_map:
+    input: ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa
+    output: mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam
+    log: logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000_filtered.log
+    jobid: 8
+    wildcards: sample=NSC_input1_SRR5027801_filter_sample1000_filtered
+
+RuleException in line 9 of /Users/douglasbarrows/Desktop/R_functions/ChIP-seq_pipeline/ChIPseq_pipeline_python_implementation/with_snakemake/Snakefile:
+'Params' object has no attribute 'rg'

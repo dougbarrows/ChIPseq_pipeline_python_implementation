@@ -1,0 +1,117 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 1
+Rules claiming more threads will be scaled down.
+Job counts:
+	count	jobs
+	1	all
+	1	bcftools_call
+	2	bwa_map
+	1	plot_quals
+	2	samtools_index
+	2	samtools_sort
+	9
+
+[Sat Apr 18 14:17:48 2020]
+rule bwa_map:
+    input: ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa, fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000.fastq
+    output: mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam
+    log: logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000_filtered.log
+    jobid: 8
+    wildcards: sample=NSC_input1_SRR5027801_filter_sample1000_filtered
+
+(bwa mem -R '@RG\tID:NSC_input1_SRR5027801_filter_sample1000_filtered\tSM:NSC_input1_SRR5027801_filter_sample1000_filtered' -t 1 ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000.fastq | samtools view -Sb - > mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam) 2> logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000_filtered.log
+[Sat Apr 18 14:18:03 2020]
+Finished job 8.
+1 of 9 steps (11%) done
+
+[Sat Apr 18 14:18:03 2020]
+rule samtools_sort:
+    input: mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam
+    output: sorted_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam
+    jobid: 4
+    wildcards: sample=NSC_input1_SRR5027801_filter_sample1000_filtered
+
+samtools sort -T sorted_reads/NSC_input1_SRR5027801_filter_sample1000_filtered -O bam mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam > sorted_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam
+Write-protecting output file sorted_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam.
+Removing temporary output file mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam.
+[Sat Apr 18 14:18:03 2020]
+Finished job 4.
+2 of 9 steps (22%) done
+
+[Sat Apr 18 14:18:03 2020]
+rule bwa_map:
+    input: ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa, fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000.fastq
+    output: mapped_reads/NSC_input1_SRR5027801_filter_sample1000.bam
+    log: logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000.log
+    jobid: 7
+    wildcards: sample=NSC_input1_SRR5027801_filter_sample1000
+
+(bwa mem -R '@RG\tID:NSC_input1_SRR5027801_filter_sample1000\tSM:NSC_input1_SRR5027801_filter_sample1000' -t 1 ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000.fastq | samtools view -Sb - > mapped_reads/NSC_input1_SRR5027801_filter_sample1000.bam) 2> logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000.log
+[Sat Apr 18 14:18:16 2020]
+Finished job 7.
+3 of 9 steps (33%) done
+
+[Sat Apr 18 14:18:16 2020]
+rule samtools_sort:
+    input: mapped_reads/NSC_input1_SRR5027801_filter_sample1000.bam
+    output: sorted_reads/NSC_input1_SRR5027801_filter_sample1000.bam
+    jobid: 3
+    wildcards: sample=NSC_input1_SRR5027801_filter_sample1000
+
+samtools sort -T sorted_reads/NSC_input1_SRR5027801_filter_sample1000 -O bam mapped_reads/NSC_input1_SRR5027801_filter_sample1000.bam > sorted_reads/NSC_input1_SRR5027801_filter_sample1000.bam
+Write-protecting output file sorted_reads/NSC_input1_SRR5027801_filter_sample1000.bam.
+Removing temporary output file mapped_reads/NSC_input1_SRR5027801_filter_sample1000.bam.
+[Sat Apr 18 14:18:16 2020]
+Finished job 3.
+4 of 9 steps (44%) done
+
+[Sat Apr 18 14:18:16 2020]
+rule samtools_index:
+    input: sorted_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam
+    output: sorted_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam.bai
+    jobid: 6
+    wildcards: sample=NSC_input1_SRR5027801_filter_sample1000_filtered
+
+samtools index sorted_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam
+[Sat Apr 18 14:18:16 2020]
+Finished job 6.
+5 of 9 steps (56%) done
+
+[Sat Apr 18 14:18:16 2020]
+rule samtools_index:
+    input: sorted_reads/NSC_input1_SRR5027801_filter_sample1000.bam
+    output: sorted_reads/NSC_input1_SRR5027801_filter_sample1000.bam.bai
+    jobid: 5
+    wildcards: sample=NSC_input1_SRR5027801_filter_sample1000
+
+samtools index sorted_reads/NSC_input1_SRR5027801_filter_sample1000.bam
+[Sat Apr 18 14:18:16 2020]
+Finished job 5.
+6 of 9 steps (67%) done
+
+[Sat Apr 18 14:18:16 2020]
+rule bcftools_call:
+    input: ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa, sorted_reads/NSC_input1_SRR5027801_filter_sample1000.bam, sorted_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam, sorted_reads/NSC_input1_SRR5027801_filter_sample1000.bam.bai, sorted_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam.bai
+    output: calls/all.vcf
+    jobid: 2
+
+samtools mpileup -g -f ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa sorted_reads/NSC_input1_SRR5027801_filter_sample1000.bam sorted_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam | bcftools call -mv - > calls/all.vcf
+[Sat Apr 18 14:18:33 2020]
+Finished job 2.
+7 of 9 steps (78%) done
+
+[Sat Apr 18 14:18:33 2020]
+rule plot_quals:
+    input: calls/all.vcf
+    output: plots/quals.svg
+    jobid: 1
+
+[Sat Apr 18 14:18:33 2020]
+Error in rule plot_quals:
+    jobid: 1
+    output: plots/quals.svg
+
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: /Users/douglasbarrows/Desktop/R_functions/ChIP-seq_pipeline/ChIPseq_pipeline_python_implementation/with_snakemake/.snakemake/log/2020-04-18T141748.913005.snakemake.log

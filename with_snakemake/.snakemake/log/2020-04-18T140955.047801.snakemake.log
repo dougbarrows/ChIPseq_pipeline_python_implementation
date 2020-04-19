@@ -1,0 +1,5 @@
+Building DAG of jobs...
+InputFunctionException in line 9 of /Users/douglasbarrows/Desktop/R_functions/ChIP-seq_pipeline/ChIPseq_pipeline_python_implementation/with_snakemake/Snakefile:
+KeyError: '1'
+Wildcards:
+sample=1

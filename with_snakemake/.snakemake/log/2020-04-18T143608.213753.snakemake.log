@@ -1,0 +1,36 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 1
+Rules claiming more threads will be scaled down.
+Job counts:
+	count	jobs
+	1	all
+	1	bcftools_call
+	2	bwa_map
+	1	plot_quals
+	2	samtools_index
+	2	samtools_sort
+	9
+
+[Sat Apr 18 14:36:08 2020]
+rule bwa_map:
+    input: ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa
+    output: mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam
+    log: logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000_filtered.log
+    jobid: 8
+    wildcards: sample=NSC_input1_SRR5027801_filter_sample1000_filtered
+
+(bwa mem -t 1 ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa | samtools view -Sb - > mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam) 2> logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000_filtered.log
+[Sat Apr 18 14:36:08 2020]
+Error in rule bwa_map:
+    jobid: 8
+    output: mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam
+    log: logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000_filtered.log (check log file(s) for error message)
+    shell:
+        (bwa mem -t 1 ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa | samtools view -Sb - > mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam) 2> logs/bwa_mem/NSC_input1_SRR5027801_filter_sample1000_filtered.log
+
+Removing output files of failed job bwa_map since they might be corrupted:
+mapped_reads/NSC_input1_SRR5027801_filter_sample1000_filtered.bam
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: /Users/douglasbarrows/Desktop/R_functions/ChIP-seq_pipeline/ChIPseq_pipeline_python_implementation/with_snakemake/.snakemake/log/2020-04-18T143608.213753.snakemake.log

@@ -1,0 +1,5 @@
+Building DAG of jobs...
+InputFunctionException in line 9 of /Users/douglasbarrows/Desktop/R_functions/ChIP-seq_pipeline/ChIPseq_pipeline_python_implementation/with_snakemake/Snakefile:
+TypeError: string indices must be integers
+Wildcards:
+sample=fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000_filtered.fastq fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000.fastq
