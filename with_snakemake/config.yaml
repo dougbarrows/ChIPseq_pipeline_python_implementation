@@ -1,5 +1,14 @@
 samples:
-  NSC_input1_SRR5027801_filter_sample1000_filtered: fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000_filtered.fastq
-  NSC_input1_SRR5027801_filter_sample1000: fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000.fastq
+  NSC_input1_SRR5027801_filter_sample1000: "fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000.fastq"
+  NSC_input1_SRR5027801_filter_sample1000_filtered: "fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000_filtered.fastq"
 
-genome: ../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa
+fasta: "../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa"
+
+# only fill this in if you left fasta blank
+
+genome: "mm10"
+
+#aligner: "bwa-mem"
+aligner: "bowtie2"
+
+index: True
