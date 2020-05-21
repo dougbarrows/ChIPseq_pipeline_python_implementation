@@ -1,14 +1,23 @@
 samples:
-  NSC_input1_SRR5027801_filter_sample1000: "fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000.fastq"
-  NSC_input1_SRR5027801_filter_sample1000_filtered: "fastq_tiny_1000/NSC_input1_SRR5027801_filter_sample1000_filtered.fastq"
+  EV_K4me3_S1_R1_001_sample100: "../EV_K4me3_S1_R1_001_sample100.fastq"
+  EV_input_S7_R1_001_sample100: "../EV_input_S7_R1_001_sample100.fastq"
 
-fasta: "../Mus_musculus.GRCm38.dna_sm.primary_assembly.fa"
+download_fasta: False # if this is true, then the entry to 'fasta' wont matter, the result of this download will be used
+fasta: "Homo_sapiens.GRCh37.dna_sm.primary_assembly.fa" # this should be set if 'download_fasta' is False
 
 # only fill this in if you left fasta blank
 
-genome: "mm10"
+genome: "hg19"
 
 #aligner: "bwa-mem"
 aligner: "bowtie2"
+align_cores: 2
 
-index: True
+index: False
+
+#duplicates: "mark"
+duplicates: "rm"
+
+peak_samplesheet_path: "sample_sheet_test.csv"
+
+extra_peaks_args: " "
